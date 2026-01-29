@@ -7,31 +7,9 @@
   };
 
   outputs = inputs@{ flake-parts, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
-      imports = [
-        # To import an internal flake module: ./other.nix
-        # To import an external flake module:
-        #   1. Add foo to inputs
-        #   2. Add foo as a parameter to the outputs function
-        #   3. Add here: foo.flakeModule
-
-      ];
-      systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" "x86_64-darwin" ];
-      perSystem = { config, self', inputs', pkgs, system, ... }: {
-        # Per-system attributes can be defined here. The self' and inputs'
-        # module parameters provide easy access to attributes of the same
-        # system.
-
-        # Equivalent to  inputs'.nixpkgs.legacyPackages.hello;
-        packages.default = pkgs.zsh;
-        packages.fzf-config = pkgs.writeText "fzf-config" ''
-          --layout=reverse
-          --info=inline
-          --height=40%
-          --bind='ctrl-/:toggle-preview'
-          --multi
-        '';
-        packages.zsh-config = pkgs.writeTextDir ".zshrc" ''
+    let
+      mkWrappedZsh = pkgs: let
+        zsh-config = pkgs.writeTextDir ".zshrc" ''
           bindkey -v
           autoload -U compinit
           source ${pkgs.zsh-autosuggestions}/share/zsh-autosuggestions/zsh-autosuggestions.zsh
@@ -80,6 +58,42 @@
 
           source ${pkgs.zsh-syntax-highlighting}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
         '';
+        pkg = pkgs.zsh;
+        mainProg = pkg.meta.mainProgram or pkg.pname;
+      in pkgs.symlinkJoin {
+        inherit (pkg) name meta;
+        paths = [ pkg ];
+        nativeBuildInputs = [ pkgs.makeWrapper ];
+        postBuild = ''
+          wrapProgram $out/bin/${mainProg} \
+            --set ZDOTDIR ${zsh-config}
+        '';
+      };
+    in
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      imports = [
+        # To import an internal flake module: ./other.nix
+        # To import an external flake module:
+        #   1. Add foo to inputs
+        #   2. Add foo as a parameter to the outputs function
+        #   3. Add here: foo.flakeModule
+
+      ];
+      systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" "x86_64-darwin" ];
+      perSystem = { config, self', inputs', pkgs, system, ... }: {
+        # Per-system attributes can be defined here. The self' and inputs'
+        # module parameters provide easy access to attributes of the same
+        # system.
+
+        # Equivalent to  inputs'.nixpkgs.legacyPackages.hello;
+        packages.default = mkWrappedZsh pkgs;
+        packages.fzf-config = pkgs.writeText "fzf-config" ''
+          --layout=reverse
+          --info=inline
+          --height=40%
+          --bind='ctrl-/:toggle-preview'
+          --multi
+        '';
         devShells.default = pkgs.mkShell {
           packages = [ self'.packages.default pkgs.fzf ];
           env = {
@@ -87,7 +101,6 @@
             FZF_CTRL_R_OPTS = "--with-nth 2.. --bind='ctrl-y:execute-silent(echo -n {2..} | ${pkgs.wl-clipboard}/bin/wl-copy)+abort'";
             FZF_CTRL_T_OPTS = "--walker-skip=.git,node_modules,target --preview='${pkgs.bat}/bin/bat --style=plain --color=always --line-range :500 {}' --bind='ctrl-/:change-preview-window(down|hidden|)'";
             FZF_ALT_C_OPTS = "--preview='${pkgs.eza}/bin/eza -T --color=always {} | head -200'";
-            ZDOTDIR = "${self'.packages.zsh-config}";
           };
         };
       };
@@ -96,6 +109,9 @@
         # agnostic ones like nixosModule and system-enumerating ones, although
         # those are more easily expressed in perSystem.
 
+        overlays.default = final: prev: {
+          zsh = mkWrappedZsh final;
+        };
       };
     };
 }
