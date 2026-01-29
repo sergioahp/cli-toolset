@@ -94,11 +94,20 @@
           --bind='ctrl-/:toggle-preview'
           --multi
         '';
+        packages.smart-copy = pkgs.writeShellScript "smart-copy" ''
+          if [ -n "$WAYLAND_DISPLAY" ]; then
+            ${pkgs.wl-clipboard}/bin/wl-copy
+          elif [ -n "$DISPLAY" ]; then
+            ${pkgs.xclip}/bin/xclip -selection clipboard
+          else
+            cat > /dev/null
+          fi
+        '';
         devShells.default = pkgs.mkShell {
           packages = [ self'.packages.default pkgs.fzf ];
           env = {
             FZF_DEFAULT_OPTS_FILE = "${self'.packages.fzf-config}";
-            FZF_CTRL_R_OPTS = "--with-nth 2.. --bind='ctrl-y:execute-silent(echo -n {2..} | ${pkgs.wl-clipboard}/bin/wl-copy)+abort'";
+            FZF_CTRL_R_OPTS = "--with-nth 2.. --bind='ctrl-y:execute-silent(echo -n {2..} | ${self'.packages.smart-copy})+abort'";
             FZF_CTRL_T_OPTS = "--walker-skip=.git,node_modules,target --preview='${pkgs.bat}/bin/bat --style=plain --color=always --line-range :500 {}' --bind='ctrl-/:change-preview-window(down|hidden|)'";
             FZF_ALT_C_OPTS = "--preview='${pkgs.eza}/bin/eza -T --color=always {} | head -200'";
           };
