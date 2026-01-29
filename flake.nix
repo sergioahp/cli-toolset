@@ -1,3 +1,8 @@
+# TODO: remember why git does not use ${} syntax, I remember ther was a reason
+# TODO: how to expose env vars such as those for fzf and MANPAGER?
+# TODO: how to expose aliases so they are easily consumed by outside tools?
+# remember tmux uses SHELL to determine which shell to use
+# What about setting inpurc?
 {
   description = "Basic cli toolset";
 
@@ -123,6 +128,7 @@
 
         # Equivalent to  inputs'.nixpkgs.legacyPackages.hello;
         packages.default = mkWrappedZsh pkgs;
+        packages.tmux = mkWrappedTmux pkgs;
         packages.fzf-config = pkgs.writeText "fzf-config" ''
           --layout=reverse
           --info=inline
@@ -144,6 +150,8 @@
             self'.packages.default
             self'.packages.tmux
             pkgs.fzf
+            pkgs.git
+            pkgs.gh
           ];
           env = {
             FZF_DEFAULT_OPTS_FILE = "${self'.packages.fzf-config}";
