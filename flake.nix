@@ -8,6 +8,42 @@
 
   outputs = inputs@{ flake-parts, ... }:
     let
+      mkWrappedTmux = pkgs: let
+        tmux-config = pkgs.writeText "tmux.conf" ''
+          set  -g default-terminal "tmux-256color"
+          set  -g base-index      0
+          setw -g pane-base-index 0
+
+          set -g status-keys vi
+          set -g mode-keys   vi
+
+          # rebind main key: C-a
+          unbind C-b
+          set -g prefix C-a
+          bind -n -N "Send the prefix key through to the application" \
+            C-a send-prefix
+
+          set  -g mouse             off
+          set  -g focus-events      off
+          setw -g aggressive-resize off
+          setw -g clock-mode-style  12
+          set  -s escape-time       0
+          set  -g history-limit     5000
+
+          # Differentiate with user config by color for debugging purposes
+          set -g status-style bg=color234,fg=color208
+        '';
+        pkg = pkgs.tmux;
+        mainProg = pkg.meta.mainProgram or pkg.pname;
+      in pkgs.symlinkJoin {
+        inherit (pkg) name meta;
+        paths = [ pkg ];
+        nativeBuildInputs = [ pkgs.makeWrapper ];
+        postBuild = ''
+          wrapProgram $out/bin/${mainProg} \
+            --add-flags "-f ${tmux-config}"
+        '';
+      };
       mkWrappedZsh = pkgs: let
         zsh-config = pkgs.writeTextDir ".zshrc" ''
           bindkey -v
@@ -104,7 +140,11 @@
           fi
         '';
         devShells.default = pkgs.mkShell {
-          packages = [ self'.packages.default pkgs.fzf ];
+          packages =[
+            self'.packages.default
+            self'.packages.tmux
+            pkgs.fzf
+          ];
           env = {
             FZF_DEFAULT_OPTS_FILE = "${self'.packages.fzf-config}";
             FZF_CTRL_R_OPTS = "--with-nth 2.. --bind='ctrl-y:execute-silent(echo -n {2..} | ${self'.packages.smart-copy})+abort'";
@@ -120,6 +160,7 @@
 
         overlays.default = final: prev: {
           zsh = mkWrappedZsh final;
+          tmux = mkWrappedTmux final;
         };
       };
     };
